@@ -1,0 +1,82 @@
+[
+  {
+    "question": "What is Robotic Telekinesis?",
+    "ground_truth": "Robotic Telekinesis is a system for real-time remote visual teleoperation of a dexterous robotic hand and arm, where a human operator demonstrates tasks just by moving their own hand, observed via a single RGB camera."
+  },
+  {
+    "question": "What camera setup does Robotic Telekinesis use?",
+    "ground_truth": "Robotic Telekinesis uses a single uncalibrated RGB camera to observe the human operator."
+  },
+  {
+    "question": "What robot hardware is used in the Robotic Telekinesis system?",
+    "ground_truth": "The system uses a Ufactory xArm6 robot arm with a Wonik Robotics Allegro Hand as the end-effector."
+  },
+  {
+    "question": "What is the hand retargeter network architecture?",
+    "ground_truth": "The hand retargeter network is a Multi-Layer Perceptron with two hidden layers that takes a human hand pose vector of 55 dimensions as input and outputs 16 Allegro hand joint angles."
+  },
+  {
+    "question": "What was the success rate on the dice pickup task?",
+    "ground_truth": "The success rate on the Pickup Dice Toy task was 0.9 for the proposed system and 0.7 for the DexPilot-Monocular baseline."
+  },
+  {
+    "question": "How does the system avoid self-collisions?",
+    "ground_truth": "The system uses an adversarial self-collision classifier trained to detect illegal joint configurations, whose gradient is backpropagated through the retargeter network during training."
+  },
+  {
+    "question": "What dataset was used to train the hand retargeter?",
+    "ground_truth": "The hand retargeter was trained on a combination of the FreiHand dataset with 30,000 samples and 30,000 randomly chosen samples from the 100 Days of Hands dataset."
+  },
+  {
+    "question": "What is the runtime of the hand retargeter network?",
+    "ground_truth": "The hand retargeter neural network runs at 24 Hz, taking about 3ms per forward pass."
+  },
+  {
+    "question": "How many subjects participated in the human subject study?",
+    "ground_truth": "Ten previously untrained operators participated in the human subject study."
+  },
+  {
+    "question": "What is the RMSE of the neural network retargeter?",
+    "ground_truth": "The neural network retargeter achieves an RMSE of 0.17 radians (about 10 degrees) while DexPilot-Monocular achieves 0.25 radians per joint."
+  },
+  {
+    "question": "What is the key insight behind Robotic Telekinesis?",
+    "ground_truth": "The key insight is that while paired human-robot correspondence data is expensive to collect, the internet contains a massive corpus of rich and diverse human hand videos that can be leveraged for training."
+  },
+  {
+    "question": "What tasks were used to evaluate the system with trained operators?",
+    "ground_truth": "Ten tasks were used including Pickup Dice Toy, Pickup Dinosaur Doll, Box Rotation, Scissor Pickup, Cup Stack, Two Cup Stacking, Pouring Cubes onto Plate, Cup Into Plate, Open Drawer, and Open Drawer and Pickup Cup."
+  },
+  {
+    "question": "What is the energy function used for hand retargeting?",
+    "ground_truth": "The energy function captures dissimilarity between human and robot hand poses using ten keyvectors connecting pairs of keypoints, computing the Euclidean difference between scaled human and robot keyvectors."
+  },
+  {
+    "question": "What is FrankMocap used for in the pipeline?",
+    "ground_truth": "FrankMocap is used as the hand and body pose estimator to obtain SMPL-X model parameters from image crops of the operator."
+  },
+  {
+    "question": "What is the SMPL-X model?",
+    "ground_truth": "SMPL-X is a single unified parametric model of both the human body and hands used to represent hand shape and pose parameters."
+  },
+  {
+    "question": "How does the system handle arm teleoperation?",
+    "ground_truth": "The system estimates the relative transformation between the human wrist and torso, then maps this to the robot arm using inverse kinematics with a Selectively Damped Least Squares solver."
+  },
+  {
+    "question": "What baseline was compared against Robotic Telekinesis?",
+    "ground_truth": "The baseline is DexPilot-Monocular which uses online gradient descent optimization for hand pose retargeting instead of a neural network."
+  },
+  {
+    "question": "How does the software architecture optimize runtime performance?",
+    "ground_truth": "The system uses a ROS publisher-subscriber architecture with each node running on a separate process, achieving 25Hz runtime by parallelizing computation across nodes."
+  },
+  {
+    "question": "What institution developed Robotic Telekinesis?",
+    "ground_truth": "Robotic Telekinesis was developed at Carnegie Mellon University by Aravind Sivakumar, Kenneth Shaw, and Deepak Pathak."
+  },
+  {
+    "question": "What is the purpose of low-pass filtering in the arm retargeting pipeline?",
+    "ground_truth": "Low-pass filtering is applied to handle minor errors in human body pose estimation and ensure smooth motion by rejecting outliers from the stream of estimated wrist poses."
+  }
+]

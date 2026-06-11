@@ -1,0 +1,67 @@
+# Environment
+.env
+*.env
+
+# Credentials (NEVER commit these)
+credentials.json
+token.json
+service_account.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Eval venv (separate)
+eval_venv/
+
+# Models cache (too large)
+.cache/
+*.bin
+*.onnx
+*.safetensors
+
+# Logs
+*.log
+logs/
+
+# Temp files
+/tmp/
+*.tmp
+*.temp
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (frontend)
+node_modules/
+frontend/dist/
+frontend/.env
+
+# Charts output
+/tmp/opsagent_charts/
+
+# Eval results (optional — remove if you want to track scores)
+evals/results.json
+evals/cost_log.json
+
+# Docker volumes (managed by Docker, not git)
+qdrant_data/
+postgres_data/
+
+token.json
+credentials.json
