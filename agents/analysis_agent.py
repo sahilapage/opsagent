@@ -1,4 +1,5 @@
 from __future__ import annotations
+from langsmith import traceable
 import structlog
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -11,6 +12,7 @@ def get_llm():
     s = get_settings()
     return ChatGroq(model=s.groq_model_large, api_key=s.groq_api_key, temperature=0)
 
+@traceable(name="GitHub Agent", run_type="tool")
 def analysis_node(state: AgentState) -> AgentState:
     try:
         llm = get_llm()

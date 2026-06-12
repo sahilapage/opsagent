@@ -9,7 +9,7 @@ from agents.state import AgentState
 log = structlog.get_logger()
 
 PLANNER_PROMPT = """You are a task planner for an AI agent system.
-Break down complex multi-step tasks into a sequence of agent calls.
+Your job is to decide if a task needs multiple agents working together.
 
 Available agents:
 - rag: search knowledge base / answer from documents
@@ -18,22 +18,41 @@ Available agents:
 - action: send email, create calendar event, read Gmail, Google Drive
 - github: GitHub issues, PRs, commits, auto-fix
 - code: execute Python code, generate charts, run scripts
-- general: general knowledge questions
+- general: general knowledge questions, personal questions, memory recall
 
-Analyze the task and create a step-by-step plan.
+STRICT RULES — set needs_planning to FALSE for:
+- ANY question about the user themselves ("who am I", "what is my name", "what am I working on")
+- Simple single questions answerable by one agent
+- Greetings or conversational queries
+- Questions about a single topic or service
+- Memory or context questions
+
+Set needs_planning to FALSE for:
+- ANY single-service action (send email, create event, read emails, list files)
+- Direct action requests that don't need data from another agent first
+
+Set needs_planning to TRUE ONLY when ALL of these are true:
+- Task EXPLICITLY mentions 3+ different services/tools
+- Steps have clear sequential dependency (output of step 1 feeds step 2)
+- Task uses words like "then", "after that", "and also", "followed by"
+
+Examples:
+"who am I" -> needs_planning: false (memory question, use general)
+"what is my name" -> needs_planning: false (memory question)
+"search web for X and email results" -> needs_planning: true (browser + action)
+"analyze github issues then create a report and email it" -> needs_planning: true
+"what is machine learning" -> needs_planning: false (single agent)
+"show my calendar events" -> needs_planning: false (single agent)
+"Send email to X with subject Y" -> needs_planning: false (single action agent task)
+"Create a calendar event" -> needs_planning: false (single action agent task)
+"Read my emails" -> needs_planning: false (single action agent task)
 
 Return JSON only:
 {
   "needs_planning": true or false,
-  "steps": [
-    {"step": 1, "agent": "agent_name", "task": "specific task for this agent", "depends_on": null},
-    {"step": 2, "agent": "agent_name", "task": "specific task using result from step 1", "depends_on": 1}
-  ],
-  "reasoning": "why this plan"
-}
-
-If the task is simple and needs only one agent, set needs_planning to false."""
-
+  "steps": [],
+  "reasoning": "brief reason"
+}"""
 
 def create_plan(task: str) -> dict:
     s = get_settings()
@@ -97,7 +116,12 @@ def execute_step(step: dict, previous_results: list[str],
         return f"Unknown agent: {agent_name}"
 
     result_state = node_fn(sub_state)
-    return result_state.get("final_answer", "No result")
+    final = result_state.get("final_answer", "")
+    if not final:
+        return "No result"
+    if isinstance(final, dict):
+        return json.dumps(final)
+    return str(final)
 
 
 def planner_node(state: AgentState) -> AgentState:
@@ -115,14 +139,25 @@ def planner_node(state: AgentState) -> AgentState:
     all_results = []
 
     for step in steps:
+        # Validate step is a dict
+        if not isinstance(step, dict):
+            log.warning("planner_invalid_step", step=str(step)[:50])
+            continue
+        if "agent" not in step or "task" not in step:
+            log.warning("planner_missing_fields", step=str(step)[:50])
+            continue
+        # Ensure step number exists
+        if "step" not in step:
+            step["step"] = steps.index(step) + 1
+
         log.info("planner_step", step=step["step"], agent=step["agent"])
         result = execute_step(step, previous_results, state)
         previous_results.append(result)
         all_results.append({
             "step": step["step"],
             "agent": step["agent"],
-            "task": step["task"],
-            "result": result[:300],
+            "task": str(step.get("task", ""))[:100],
+            "result": str(result)[:300],
         })
 
     # Synthesize final answer from all steps

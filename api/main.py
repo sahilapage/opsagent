@@ -11,6 +11,17 @@ from rag.ingest import ingest_csv, ingest_pdf, ingest_url
 from rag.models import IngestResult, RAGResponse
 from rag.store import ensure_collection, get_client
 from fastapi import BackgroundTasks
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+# Set LangSmith vars before any langchain imports
+os.environ.setdefault("LANGCHAIN_TRACING_V2", os.getenv("LANGCHAIN_TRACING_V2", "false"))
+os.environ.setdefault("LANGCHAIN_API_KEY", os.getenv("LANGCHAIN_API_KEY", ""))
+os.environ.setdefault("LANGCHAIN_PROJECT", os.getenv("LANGCHAIN_PROJECT", "opsagent"))
+os.environ.setdefault("LANGSMITH_API_KEY", os.getenv("LANGSMITH_API_KEY", ""))
+os.environ.setdefault("LANGSMITH_TRACING", os.getenv("LANGSMITH_TRACING", "false"))
+os.environ.setdefault("LANGSMITH_PROJECT", os.getenv("LANGSMITH_PROJECT", "opsagent"))
 
 log = structlog.get_logger()
 
@@ -278,3 +289,38 @@ def get_eval_results():
             return json.load(f)
     except FileNotFoundError:
         raise HTTPException(404, "No eval results yet. Run POST /eval/run first.")
+
+
+# ── HITL endpoints ─────────────────────────────────────────────────────────────
+
+@app.post("/agent/approve/{trace_id}")
+def approve_endpoint(trace_id: str):
+    from agents.action_agent import approve_action
+    result = approve_action(trace_id)
+    return {"status": "approved", "result": result}
+
+@app.post("/agent/reject/{trace_id}")
+def reject_endpoint(trace_id: str):
+    from agents.action_agent import reject_action
+    result = reject_action(trace_id)
+    return {"status": "rejected", "result": result}
+
+@app.get("/agent/pending")
+def pending_approvals():
+    from agents.action_agent import _pending_approvals
+    return {"pending": list(_pending_approvals.keys())}
+
+
+# ── GitHub HITL endpoints ──────────────────────────────────────────────────────
+
+@app.post("/agent/approve/github/{trace_id}")
+def approve_github_endpoint(trace_id: str):
+    from agents.github_agent import approve_github_action
+    result = approve_github_action(trace_id)
+    return {"status": "approved", "result": result}
+
+@app.post("/agent/reject/github/{trace_id}")
+def reject_github_endpoint(trace_id: str):
+    from agents.github_agent import reject_github_action
+    result = reject_github_action(trace_id)
+    return {"status": "rejected", "result": result}

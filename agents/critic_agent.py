@@ -9,7 +9,7 @@ from agents.state import AgentState
 log = structlog.get_logger()
 
 MAX_REFLECTIONS = 2
-QUALITY_THRESHOLD = 0.7
+QUALITY_THRESHOLD = 0.6
 
 CRITIC_PROMPT = """You are a quality reviewer for an AI agent's responses.
 Score this response and provide feedback.
@@ -79,6 +79,11 @@ def critic_node(state: AgentState) -> AgentState:
     reflection_count = state.get("reflection_count", 0)
 
     if not answer or reflection_count >= MAX_REFLECTIONS:
+        return state
+    
+    # Skip critic if memory context was injected — answer is already personalized
+    if state.get("memory_context") and agent == "general":
+        log.info("critic_skipped", reason="memory_context_present")
         return state
 
     # Skip critic for action/github/code agents — their output is factual

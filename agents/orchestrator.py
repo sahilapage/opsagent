@@ -15,6 +15,7 @@ from agents.code_agent import code_node
 from agents.guardrail_agent import guardrail_node
 from agents.critic_agent import critic_node
 from agents.planner_agent import planner_node
+from langsmith import traceable
 
 
 log = structlog.get_logger()
@@ -67,6 +68,8 @@ Examples:
 "What PRs are open in my repo?" -> github
 "Suggest a fix for issue #5" -> github
 "Auto fix GitHub issue number 1" -> github
+"How many github repos do I have?" -> github
+"How many repositories do I have?" -> github
 "Fix issue #1 automatically" -> github
 "Create a PR to fix issue 1" -> github
 "Create a github issue with title X and body Y" -> github
@@ -501,6 +504,7 @@ def get_graph():
 #         "error": final_state.get("error"),
 #     }
 
+@traceable(name="OpsAgent", run_type="chain")
 def run_agent(task: str, user_id: str = "default",
               session_id: str = None) -> dict:
     import uuid as _uuid
@@ -515,6 +519,7 @@ def run_agent(task: str, user_id: str = "default",
     top_facts = get_top_memories(user_id, top_k=5)
     all_memories = list(dict.fromkeys(semantic_memories + top_facts))
     memory_context = "\n".join(f"- {m}" for m in all_memories[:10]) if all_memories else ""
+    log.info("memory_debug", count=len(all_memories), context_preview=memory_context[:200])
     recent_history = get_recent_history(user_id, turns=6)
     history_context = format_history_for_context(recent_history)
     store_turn(user_id, session_id, "user", task)

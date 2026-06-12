@@ -231,40 +231,54 @@ def list_drive_files(query: str = "", max_results: int = 10) -> str:
 
 # ── Action node ────────────────────────────────────────────────────────────────
 
+# ── HITL pending store ─────────────────────────────────────────────────────────
+# In-memory store for pending approvals {trace_id: {action, state}}
+import time
+_pending_approvals: dict = {}
+
 def action_node(state: AgentState) -> AgentState:
     try:
         intent = parse_intent(state["task"])
         action = intent.get("action", "unknown")
         log.info("action_node", action=action)
 
-        if action == "send_email":
-            result = send_email(
-                to=intent.get("to", ""),
-                subject=intent.get("subject", "No Subject"),
-                body=intent.get("body", ""),
-            )
-        # elif action == "read_emails":
-        #     result = read_emails(query=intent.get("query", "is:unread"))
-        elif action == "read_emails":
-            result = read_emails(
-                query=intent.get("query", ""),
-                inbox=intent.get("inbox", "primary"),
-                read_status=intent.get("read_status", "all"),
-            )    
-        elif action == "create_event":
-            result = create_event(
-                title=intent.get("event_title", "New Event"),
-                date_str=intent.get("event_date", "2026-06-09T10:00:00"),
-            )
-        elif action == "list_events":
-            result = list_events()
-        elif action == "list_files":
-            result = list_drive_files(query=intent.get("query", ""))
-        else:
-            result = f"Could not understand action from: '{state['task']}'. Try being more specific, e.g. 'Send email to x@y.com with subject Hello and body Hi there'"
+        # High-stakes actions require HITL approval
+        HIGH_STAKES = {"send_email", "create_event"}
 
+        if action in HIGH_STAKES:
+            trace_id = state.get("trace_id", "unknown")
+
+            # Build human-readable description
+            if action == "send_email":
+                desc = f"Send email to {intent.get('to', '?')} with subject '{intent.get('subject', '?')}'"
+            elif action == "create_event":
+                desc = f"Create calendar event '{intent.get('event_title', '?')}' on {intent.get('event_date', '?')}"
+            else:
+                desc = action
+
+            # Store pending approval
+            _pending_approvals[trace_id] = {
+                "action": action,
+                "intent": intent,
+                "description": desc,
+                "task": state["task"],
+                "timestamp": time.time(),
+            }
+
+            log.info("hitl_required", trace_id=trace_id, action=action)
+            return {
+                **state,
+                "hitl_required": True,
+                "hitl_action": desc,
+                "final_answer": f"⏸️ **Approval Required**\n\nAction: {desc}\n\nTo approve: `POST /agent/approve/{trace_id}`\nTo reject: `POST /agent/reject/{trace_id}`",
+                "results": state["results"] + [{"agent": "action", "output": "awaiting_approval"}],
+            }
+
+        # Non-high-stakes actions execute immediately
+        result = _execute_action(action, intent)
         return {
             **state,
+            "hitl_required": False,
             "results": state["results"] + [{"agent": "action", "output": result}],
             "final_answer": result,
         }
@@ -272,3 +286,48 @@ def action_node(state: AgentState) -> AgentState:
     except Exception as e:
         log.error("action_node_error", error=str(e))
         return {**state, "error": str(e), "final_answer": f"Action failed: {str(e)}"}
+
+
+def _execute_action(action: str, intent: dict) -> str:
+    """Execute an action directly (used for non-HITL and approved actions)."""
+    if action == "send_email":
+        return send_email(
+            to=intent.get("to", ""),
+            subject=intent.get("subject", "No Subject"),
+            body=intent.get("body", ""),
+        )
+    elif action == "read_emails":
+        return read_emails(
+            query=intent.get("query", ""),
+            inbox=intent.get("inbox", "primary"),
+            read_status=intent.get("read_status", "all"),
+        )
+    elif action == "create_event":
+        return create_event(
+            title=intent.get("event_title", "New Event"),
+            date_str=intent.get("event_date", "2026-06-16T10:00:00"),
+        )
+    elif action == "list_events":
+        return list_events()
+    elif action == "list_files":
+        return list_drive_files(query=intent.get("query", ""))
+    else:
+        return f"Could not understand action from: '{intent}'"
+
+
+def approve_action(trace_id: str) -> str:
+    """Execute a previously approved action."""
+    if trace_id not in _pending_approvals:
+        return "No pending action found for this trace_id."
+    pending = _pending_approvals.pop(trace_id)
+    log.info("hitl_approved", trace_id=trace_id, action=pending["action"])
+    return _execute_action(pending["action"], pending["intent"])
+
+
+def reject_action(trace_id: str) -> str:
+    """Reject a pending action."""
+    if trace_id not in _pending_approvals:
+        return "No pending action found for this trace_id."
+    pending = _pending_approvals.pop(trace_id)
+    log.info("hitl_rejected", trace_id=trace_id, action=pending["action"])
+    return f"❌ Action cancelled: {pending['description']}"

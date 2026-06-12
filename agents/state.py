@@ -19,3 +19,5 @@ class AgentState(TypedDict):
     history_context: str
     guardrail_passed: bool
     reflection_count: int
+    hitl_required: bool
+    hitl_action: Optional[str]

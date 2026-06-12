@@ -8,6 +8,15 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from rag.config import get_settings
 from agents.state import AgentState
 
+# ── HITL pending store ─────────────────────────────────────────────────────────
+import time
+_pending_github_approvals: dict = {}
+
+GITHUB_HIGH_STAKES = {
+    "create_pr", "merge_pr", "close_issue",
+    "create_branch", "auto_fix_issue", "create_issue"
+}
+
 log = structlog.get_logger()
 
 
@@ -278,6 +287,14 @@ def get_workflow_runs() -> str:
         return output
     except Exception as e:
         return f"Could not fetch workflow runs: {str(e)}"
+    
+def count_repos() -> str:
+    g = get_github()
+    user = g.get_user()
+    repos = list(user.get_repos())
+    public = sum(1 for r in repos if not r.private)
+    private = sum(1 for r in repos if r.private)
+    return f"You have {len(repos)} total repositories:\n  - Public: {public}\n  - Private: {private}"    
 
 
 def repo_health() -> str:
@@ -610,6 +627,7 @@ GITHUB_INTENT_PROMPT = """Extract GitHub action from the user request. Return JS
   "state": "open" or "closed" or "all",
   "labels": list of strings or null,
   "file_path": string or null,
+  "count_repos": integer or null,
   "branch_name": string or null,
   "head_branch": string or null,
   "base_branch": "main",
@@ -642,42 +660,65 @@ def github_node(state: AgentState) -> AgentState:
         action = intent.get("action", "list_issues")
         log.info("github_node", action=action)
 
+        # High-stakes GitHub actions require HITL
+        if action in GITHUB_HIGH_STAKES:
+            trace_id = state.get("trace_id", "unknown")
+
+            # Build description
+            if action == "create_pr":
+                desc = f"Create PR: '{intent.get('title', '?')}' ({intent.get('head_branch', '?')} → {intent.get('base_branch', 'main')})"
+            elif action == "merge_pr":
+                desc = f"Merge PR #{intent.get('pr_number', '?')}"
+            elif action == "close_issue":
+                desc = f"Close issue #{intent.get('issue_number', '?')}"
+            elif action == "create_branch":
+                desc = f"Create branch '{intent.get('branch_name', '?')}'"
+            elif action == "auto_fix_issue":
+                desc = f"Auto-fix issue #{intent.get('issue_number', '?')} (reads code, commits fix, creates PR)"
+            elif action == "create_issue":
+                desc = f"Create issue: '{intent.get('title', '?')}'"
+            else:
+                desc = action
+
+            # _pending_github_approvals[trace_id] = {
+            #     "action": action,
+            #     "intent": intent,
+            #     "description": desc,
+            # }
+            _pending_github_approvals[trace_id] = {
+                "action": action,
+                "intent": intent,
+                "description": desc,
+                "task": state["task"],
+                "timestamp": time.time(),
+            }
+
+
+            log.info("github_hitl_required", trace_id=trace_id, action=action)
+            return {
+                **state,
+                "hitl_required": True,
+                "hitl_action": desc,
+                "final_answer": f"⏸️ **GitHub Approval Required**\n\nAction: {desc}\n\nTo approve: `POST /agent/approve/github/{trace_id}`\nTo reject: `POST /agent/reject/github/{trace_id}`",
+                "results": state["results"] + [{"agent": "github", "output": "awaiting_approval"}],
+            }
+
+        # Read-only actions execute immediately
         action_map = {
             "list_issues": lambda: list_issues(state=intent.get("state", "open")),
             "get_issue": lambda: get_issue(int(intent.get("issue_number", 1))),
-            "create_issue": lambda: create_issue(
-                title=intent.get("title", "New Issue"),
-                body=intent.get("body", ""),
-                labels=intent.get("labels"),
-            ),
-            "close_issue": lambda: close_issue(
-                issue_number=int(intent.get("issue_number", 1)),
-                comment=intent.get("comment"),
-            ),
             "comment_issue": lambda: comment_on_issue(
                 issue_number=int(intent.get("issue_number", 1)),
                 comment=intent.get("comment", ""),
             ),
             "suggest_fix": lambda: suggest_fix_for_issue(int(intent.get("issue_number", 1))),
-            "auto_fix_issue": lambda: auto_fix_issue(int(intent.get("issue_number", 1))),
             "list_prs": lambda: list_prs(state=intent.get("state", "open")),
             "get_pr": lambda: get_pr(int(intent.get("pr_number", 1))),
-            "create_pr": lambda: create_pr(
-                title=intent.get("title", "New PR"),
-                body=intent.get("body", ""),
-                head_branch=intent.get("head_branch", ""),
-                base_branch=intent.get("base_branch", "main"),
-            ),
-            "merge_pr": lambda: merge_pr(int(intent.get("pr_number", 1))),
             "code_review": lambda: code_review(int(intent.get("pr_number", 1))),
             "repo_summary": lambda: get_repo_summary(),
             "list_commits": lambda: list_commits(),
             "get_file": lambda: get_file(intent.get("file_path", "README.md")),
             "list_branches": lambda: list_branches(),
-            "create_branch": lambda: create_branch(
-                branch_name=intent.get("branch_name", "new-branch"),
-                from_branch=intent.get("base_branch", "main"),
-            ),
             "search_code": lambda: search_code(intent.get("query", "")),
             "workflow_runs": lambda: get_workflow_runs(),
             "repo_health": lambda: repo_health(),
@@ -698,3 +739,56 @@ def github_node(state: AgentState) -> AgentState:
     except Exception as e:
         log.error("github_node_error", error=str(e))
         return {**state, "error": str(e), "final_answer": f"GitHub agent error: {str(e)}"}
+
+def approve_github_action(trace_id: str) -> str:
+    if trace_id not in _pending_github_approvals:
+        return "No pending GitHub action found or it has expired."
+    pending = _pending_github_approvals[trace_id]
+    if time.time() - pending["timestamp"] > 300:
+        _pending_github_approvals.pop(trace_id)
+        return "⏰ GitHub approval request expired (5 minute timeout)."
+    _pending_github_approvals.pop(trace_id)
+    action = pending["action"]
+    intent = pending["intent"]
+    log.info("github_hitl_approved", trace_id=trace_id, action=action)
+
+    action_map = {
+        "create_pr": lambda: create_pr(
+            title=intent.get("title", "New PR"),
+            body=intent.get("body", ""),
+            head_branch=intent.get("head_branch", ""),
+            base_branch=intent.get("base_branch", "main"),
+        ),
+        "merge_pr": lambda: merge_pr(int(intent.get("pr_number", 1))),
+        "close_issue": lambda: close_issue(
+            issue_number=int(intent.get("issue_number", 1)),
+            comment=intent.get("comment"),
+        ),
+        "create_branch": lambda: create_branch(
+            branch_name=intent.get("branch_name", "new-branch"),
+            from_branch=intent.get("base_branch", "main"),
+        ),
+        "auto_fix_issue": lambda: auto_fix_issue(int(intent.get("issue_number", 1))),
+        "create_issue": lambda: create_issue(
+            title=intent.get("title", "New Issue"),
+            body=intent.get("body", ""),
+            labels=intent.get("labels"),
+        ),
+    }
+
+    handler = action_map.get(action)
+    if not handler:
+        return f"Unknown action: {action}"
+    return handler()
+
+
+def reject_github_action(trace_id: str) -> str:
+    if trace_id not in _pending_github_approvals:
+        return "No pending GitHub action found or it has expired."
+    pending = _pending_github_approvals[trace_id]
+    if time.time() - pending["timestamp"] > 300:
+        _pending_github_approvals.pop(trace_id)
+        return "⏰ GitHub approval request expired (5 minute timeout)."
+    _pending_github_approvals.pop(trace_id)
+    log.info("github_hitl_rejected", trace_id=trace_id)
+    return f"❌ GitHub action cancelled: {pending['description']}"

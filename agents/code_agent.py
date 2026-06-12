@@ -8,6 +8,7 @@ import time
 import base64
 import subprocess
 import tempfile
+from langsmith import traceable
 import structlog
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -366,6 +367,7 @@ def parse_code_intent(task: str) -> dict:
 
 # ── Code node ──────────────────────────────────────────────────────────────────
 
+@traceable(name="Code Agent", run_type="tool")
 def code_node(state: AgentState) -> AgentState:
     try:
         task = state["task"]

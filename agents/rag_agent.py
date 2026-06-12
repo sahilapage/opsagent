@@ -2,9 +2,11 @@ from __future__ import annotations
 import structlog
 from rag.chain import answer as rag_answer
 from agents.state import AgentState
+from langsmith import traceable
 
 log = structlog.get_logger()
 
+@traceable(name="RAG Agent", run_type="retriever")
 def rag_node(state: AgentState) -> AgentState:
     try:
         result = rag_answer(query=state["task"])
