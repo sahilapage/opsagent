@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+from langsmith import traceable
 import structlog
 from playwright.async_api import async_playwright
 from langchain_groq import ChatGroq
@@ -329,6 +330,7 @@ def _run_in_new_loop(coro):
 #             "final_answer": f"Browser agent error: {str(e)}"
 #         }
 
+@traceable(name="Browser Agent", run_type="tool")
 def browser_node(state: AgentState) -> AgentState:
     try:
         intent = parse_browser_intent(state["task"])
