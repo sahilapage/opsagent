@@ -242,3 +242,21 @@ def delete_memory(memory_id: str) -> str:
         return f"Memory {memory_id} deleted."
     finally:
         session.close()
+
+def get_top_memories(user_id: str, top_k: int = 5) -> list[str]:
+    """Get most important memories regardless of query."""
+    session = get_session()
+    try:
+        results = session.execute(
+            text("""SELECT content FROM memories 
+                   WHERE user_id = :user_id 
+                   AND memory_type = 'fact'
+                   ORDER BY importance DESC, access_count DESC
+                   LIMIT :top_k"""),
+            {"user_id": user_id, "top_k": top_k}
+        ).fetchall()
+        return [r[0] for r in results]
+    except Exception as e:
+        return []
+    finally:
+        session.close()
