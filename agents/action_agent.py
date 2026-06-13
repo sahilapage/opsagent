@@ -23,11 +23,22 @@ SCOPES = [
 
 
 def get_credentials() -> Credentials:
-    creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    # Support Railway/production: load token from env var if file doesn't exist
+    token_json = os.environ.get("GOOGLE_TOKEN_JSON")
+    if not os.path.exists(TOKEN_FILE) and token_json:
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        tmp.write(token_json)
+        tmp.flush()
+        creds = Credentials.from_authorized_user_file(tmp.name, SCOPES)
+        os.unlink(tmp.name)
+    else:
+        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
-        with open(TOKEN_FILE, "w") as f:
-            f.write(creds.to_json())
+        if os.path.exists(TOKEN_FILE):
+            with open(TOKEN_FILE, "w") as f:
+                f.write(creds.to_json())
     return creds
 
 

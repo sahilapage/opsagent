@@ -349,3 +349,54 @@ Documents are chunked, embedded (dense 1024d + BM25 sparse), and stored in Qdran
 ## Tracing
 
 Set `LANGSMITH_TRACING=true` in `.env` to enable LangSmith tracing. Every agent node is decorated with `@traceable`, giving a full per-request trace tree in the LangSmith dashboard.
+
+---
+
+## Deployment (Railway + Vercel)
+
+### Backend on Railway
+
+1. **Create a Railway project** at [railway.app](https://railway.app) and connect your GitHub repo.
+
+2. **Add PostgreSQL plugin** — Railway dashboard → New → Database → PostgreSQL. Copy the `DATABASE_URL` it generates.
+
+3. **Set up Qdrant Cloud** (free tier at [cloud.qdrant.io](https://cloud.qdrant.io)):
+   - Create a cluster, copy the cluster URL and API key.
+
+4. **Set environment variables** in Railway service settings:
+
+   ```
+   GROQ_API_KEY=...
+   QDRANT_URL=https://xxxx.aws.cloud.qdrant.io:6333
+   QDRANT_API_KEY=...
+   DATABASE_URL=<railway postgres url>
+   GITHUB_TOKEN=...
+   GITHUB_DEFAULT_REPO=username/repo
+   SERPER_API_KEY=...
+   LANGCHAIN_API_KEY=...
+   LANGCHAIN_TRACING_V2=true
+   LANGCHAIN_PROJECT=opsagent
+   APP_ENV=production
+   ```
+
+   For Google integrations, run `python3 auth_google.py` locally to generate `token.json`, then paste its contents as:
+   ```
+   GOOGLE_TOKEN_JSON={"token":"...","refresh_token":"...","client_id":"...","client_secret":"...","scopes":[...]}
+   ```
+
+5. Railway detects `Dockerfile` and `railway.toml` automatically. Deploy triggers on push to main.
+
+6. Note the Railway service URL (e.g. `https://opsagent-production.up.railway.app`).
+
+### Frontend on Vercel
+
+1. Import the repo at [vercel.com/new](https://vercel.com/new), set root directory to `frontend/`.
+
+2. Add environment variable:
+   ```
+   VITE_API_URL=https://opsagent-production.up.railway.app
+   ```
+
+3. Deploy. Vercel auto-detects Vite. `vercel.json` handles SPA routing.
+
+The frontend calls `VITE_API_URL` for all API requests. CORS is open by default — restrict `allow_origins` in `api/main.py` before production use.

@@ -22,8 +22,12 @@ def get_client() -> QdrantClient:
     global _client
     if _client is None:
         s = get_settings()
-        _client = QdrantClient(host=s.qdrant_host, port=s.qdrant_port)
-        log.info("qdrant_connected", host=s.qdrant_host, port=s.qdrant_port)
+        if s.qdrant_url:
+            _client = QdrantClient(url=s.qdrant_url, api_key=s.qdrant_api_key or None)
+            log.info("qdrant_connected", url=s.qdrant_url)
+        else:
+            _client = QdrantClient(host=s.qdrant_host, port=s.qdrant_port)
+            log.info("qdrant_connected", host=s.qdrant_host, port=s.qdrant_port)
     return _client
 
 
@@ -31,11 +35,10 @@ def get_embedder() -> TextEmbedding:
     global _embedder
     if _embedder is None:
         s = get_settings()
-        # _embedder = TextEmbedding(model_name=s.embed_model)
-        _embedder = TextEmbedding(
-            model_name=s.embed_model,
-            cache_dir="/home/sahil/.cache/fastembed"
-        )
+        kwargs: dict = {"model_name": s.embed_model}
+        if s.fastembed_cache_dir:
+            kwargs["cache_dir"] = s.fastembed_cache_dir
+        _embedder = TextEmbedding(**kwargs)
         log.info("embed_model_loaded", model=s.embed_model)
     return _embedder
 

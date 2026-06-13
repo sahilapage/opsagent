@@ -5,10 +5,15 @@ from functools import lru_cache
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Qdrant
+    # Qdrant — local
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     qdrant_collection: str = "opsagent_knowledge"
+    # Qdrant Cloud — set these to override host:port
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
+    # Embeddings cache (override for production)
+    fastembed_cache_dir: str = ""
 
     # LLM
     groq_api_key: str = ""
