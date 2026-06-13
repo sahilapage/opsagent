@@ -40,7 +40,7 @@ function DropZone({ accept, onFile, loading, label, icon: Icon }) {
 
 function Result({ result }) {
   if (!result) return null;
-  const ok = result.status === 'ok';
+  const ok = result.status === 'success' || result.status === 'ok';
   return (
     <div style={{
       marginTop: 12, padding: '10px 14px',
@@ -51,9 +51,10 @@ function Result({ result }) {
       {ok ? (
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <CheckCircle2 size={13} color="#16a34a" />
-          <span style={{ color: '#15803d', fontWeight: 500 }}>Ingested</span>
+          <span style={{ color: '#15803d', fontWeight: 500 }}>Queued</span>
           <span style={{ color: 'var(--text2)' }}>{result.source}</span>
           <span style={{ color: 'var(--text2)' }}>{result.chunks_upserted} chunks</span>
+          <span style={{ color: 'var(--text3)', fontSize: 11 }}>· indexing in background</span>
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

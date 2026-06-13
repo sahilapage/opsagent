@@ -69,22 +69,45 @@ def list_collections():
     return {"collections": result}
 
 
+def _bg_upsert(chunks, collection: str, label: str):
+    """Embed + upsert chunks in a background thread (slow for large docs)."""
+    try:
+        from rag.store import upsert_chunks
+        n = upsert_chunks(chunks, collection=collection)
+        log.info("bg_ingest_done", label=label, chunks=n)
+    except Exception as e:
+        log.error("bg_ingest_error", label=label, error=str(e))
+
+
 @app.post("/ingest/pdf", response_model=IngestResult)
 async def ingest_pdf_endpoint(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     collection: Optional[str] = Form(None),
 ):
     if not file.filename.endswith(".pdf"):
         raise HTTPException(400, "Only .pdf files accepted")
     content = await file.read()
-    result = ingest_pdf(content, file.filename, collection=collection)
-    if result.status == "error":
-        raise HTTPException(500, result.error)
-    return result
+    try:
+        from rag.loaders import load_pdf
+        from rag.chunker import chunk_documents
+        from rag.store import ensure_collection
+        col = ensure_collection(collection)
+        pages = load_pdf(content, file.filename)
+        chunks = chunk_documents(pages)
+        if not chunks:
+            return IngestResult(doc_id="unknown", source=file.filename, chunks_upserted=0, status="success")
+        doc_id = chunks[0].metadata.doc_id
+        background_tasks.add_task(_bg_upsert, chunks, col, file.filename)
+        return IngestResult(doc_id=doc_id, source=file.filename, chunks_upserted=len(chunks), status="success")
+    except Exception as e:
+        log.error("ingest_pdf_error", error=str(e))
+        raise HTTPException(500, str(e))
 
 
 @app.post("/ingest/csv", response_model=IngestResult)
 async def ingest_csv_endpoint(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     text_columns: Optional[str] = Form(None),
     collection: Optional[str] = Form(None),
@@ -92,11 +115,22 @@ async def ingest_csv_endpoint(
     if not file.filename.endswith(".csv"):
         raise HTTPException(400, "Only .csv files accepted")
     content = await file.read()
-    cols = [c.strip() for c in text_columns.split(",")] if text_columns else None
-    result = ingest_csv(content, file.filename, text_columns=cols, collection=collection)
-    if result.status == "error":
-        raise HTTPException(500, result.error)
-    return result
+    try:
+        from rag.loaders import load_csv
+        from rag.chunker import chunk_documents
+        from rag.store import ensure_collection
+        cols_list = [c.strip() for c in text_columns.split(",")] if text_columns else None
+        col = ensure_collection(collection)
+        rows = load_csv(content, file.filename, text_columns=cols_list)
+        chunks = chunk_documents(rows)
+        if not chunks:
+            return IngestResult(doc_id="unknown", source=file.filename, chunks_upserted=0, status="success")
+        doc_id = chunks[0].metadata.doc_id
+        background_tasks.add_task(_bg_upsert, chunks, col, file.filename)
+        return IngestResult(doc_id=doc_id, source=file.filename, chunks_upserted=len(chunks), status="success")
+    except Exception as e:
+        log.error("ingest_csv_error", error=str(e))
+        raise HTTPException(500, str(e))
 
 
 class URLIngestRequest(BaseModel):
@@ -105,11 +139,25 @@ class URLIngestRequest(BaseModel):
 
 
 @app.post("/ingest/url", response_model=IngestResult)
-async def ingest_url_endpoint(req: URLIngestRequest):
-    result = await ingest_url(req.url, collection=req.collection)
-    if result.status == "error":
-        raise HTTPException(500, result.error)
-    return result
+async def ingest_url_endpoint(
+    req: URLIngestRequest,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        from rag.loaders import load_url
+        from rag.chunker import chunk_documents
+        from rag.store import ensure_collection
+        col = ensure_collection(req.collection)
+        pages = await load_url(req.url)
+        chunks = chunk_documents(pages)
+        if not chunks:
+            return IngestResult(doc_id="unknown", source=req.url, chunks_upserted=0, status="success")
+        doc_id = chunks[0].metadata.doc_id
+        background_tasks.add_task(_bg_upsert, chunks, col, req.url)
+        return IngestResult(doc_id=doc_id, source=req.url, chunks_upserted=len(chunks), status="success")
+    except Exception as e:
+        log.error("ingest_url_error", error=str(e))
+        raise HTTPException(500, str(e))
 
 
 class QueryRequest(BaseModel):
