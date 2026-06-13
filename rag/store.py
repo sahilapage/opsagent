@@ -43,7 +43,7 @@ def get_embedder() -> TextEmbedding:
     return _embedder
 
 
-def ensure_collection(collection: str | None = None) -> None:
+def ensure_collection(collection: str | None = None) -> str:
     s = get_settings()
     col = collection or s.qdrant_collection
     client = get_client()
@@ -55,6 +55,7 @@ def ensure_collection(collection: str | None = None) -> None:
             sparse_vectors_config={"bm25": SparseVectorParams(index=SparseIndexParams())},
         )
         log.info("collection_created", collection=col)
+    return col
 
 
 # def _bm25_sparse_vector(text: str) -> SparseVector:
@@ -88,7 +89,7 @@ def _bm25_sparse_vector(text: str) -> SparseVector:
     return SparseVector(indices=indices, values=values)
 
 
-def upsert_chunks(chunks: list[Chunk], collection: str | None = None) -> None:
+def upsert_chunks(chunks: list[Chunk], collection: str | None = None) -> int:
     s = get_settings()
     col = collection or s.qdrant_collection
     client = get_client()
@@ -138,15 +139,18 @@ def hybrid_search(query: str, top_k: int = 20, collection: str | None = None,
         with_payload=True,
     )
 
-    sparse_results = client.search(
-        collection_name=col,
-        query_vector=NamedSparseVector(name="bm25", vector=sparse_vec),
-        limit=top_k,
-        query_filter=qdrant_filter,
-        with_payload=True,
-    )
+    result_lists = [dense_results]
+    if sparse_vec.indices:
+        sparse_results = client.search(
+            collection_name=col,
+            query_vector=NamedSparseVector(name="bm25", vector=sparse_vec),
+            limit=top_k,
+            query_filter=qdrant_filter,
+            with_payload=True,
+        )
+        result_lists.append(sparse_results)
 
-    fused = _rrf([dense_results, sparse_results])
+    fused = _rrf(result_lists)
     log.info("hybrid_search", query=query, results=len(fused))
     return fused
 
