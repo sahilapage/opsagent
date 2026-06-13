@@ -289,7 +289,7 @@ def action_node(state: AgentState) -> AgentState:
 
 
 def _execute_action(action: str, intent: dict) -> str:
-    """Execute an action directly (used for non-HITL and approved actions)."""
+    """Execute action directly via Google API functions."""
     if action == "send_email":
         return send_email(
             to=intent.get("to", ""),
@@ -298,28 +298,35 @@ def _execute_action(action: str, intent: dict) -> str:
         )
     elif action == "read_emails":
         return read_emails(
-            query=intent.get("query", ""),
-            inbox=intent.get("inbox", "primary"),
-            read_status=intent.get("read_status", "all"),
+            query=intent.get("query") or "",
+            inbox=intent.get("inbox") or "primary",
+            max_results=5,
         )
     elif action == "create_event":
         return create_event(
             title=intent.get("event_title", "New Event"),
-            date_str=intent.get("event_date", "2026-06-16T10:00:00"),
+            date_str=intent.get("event_date", ""),
         )
     elif action == "list_events":
-        return list_events()
+        return list_events(max_results=5)
     elif action == "list_files":
-        return list_drive_files(query=intent.get("query", ""))
+        return list_drive_files(
+            query=intent.get("query") or "",
+            max_results=10,
+        )
     else:
-        return f"Could not understand action from: '{intent}'"
+        return f"Could not understand action: '{action}'"
 
 
 def approve_action(trace_id: str) -> str:
     """Execute a previously approved action."""
     if trace_id not in _pending_approvals:
-        return "No pending action found for this trace_id."
-    pending = _pending_approvals.pop(trace_id)
+        return "No pending action found or it has expired."
+    pending = _pending_approvals[trace_id]
+    if time.time() - pending["timestamp"] > 300:
+        _pending_approvals.pop(trace_id)
+        return "⏰ Approval request expired (5 minute timeout)."
+    _pending_approvals.pop(trace_id)
     log.info("hitl_approved", trace_id=trace_id, action=pending["action"])
     return _execute_action(pending["action"], pending["intent"])
 
@@ -327,7 +334,11 @@ def approve_action(trace_id: str) -> str:
 def reject_action(trace_id: str) -> str:
     """Reject a pending action."""
     if trace_id not in _pending_approvals:
-        return "No pending action found for this trace_id."
-    pending = _pending_approvals.pop(trace_id)
+        return "No pending action found or it has expired."
+    pending = _pending_approvals[trace_id]
+    if time.time() - pending["timestamp"] > 300:
+        _pending_approvals.pop(trace_id)
+        return "⏰ Approval request expired (5 minute timeout)."
+    _pending_approvals.pop(trace_id)
     log.info("hitl_rejected", trace_id=trace_id, action=pending["action"])
     return f"❌ Action cancelled: {pending['description']}"

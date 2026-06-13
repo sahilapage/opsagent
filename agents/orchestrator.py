@@ -35,9 +35,10 @@ ROUTER_PROMPT = """Classify the user query into exactly one category.
 Categories:
 - rag: questions explicitly about ingested documents, papers, research, "what does the paper say", "according to the document", topics that were likely uploaded
 - analysis: math, calculations, data analysis, statistics, "how many", "calculate", "compute", economic analysis, ripple effects
-- action: send email, create calendar event, create ticket, "send", "schedule", "create task"
+- action: send email, read emails, Gmail, create/list calendar events, Google Calendar, list/read Drive files, Google Drive
 - browser: search web, visit URL, find latest news, current scores, recent events, anything requiring real-time information, "latest", "current", "today", "recent", "live"
 - general: general knowledge questions, factual world knowledge, history, sports, science, people, places, current events, anything not requiring a document lookup
+- github: anything involving GitHub — issues, PRs, commits, branches, repo, code review, auto-fix, workflow runs, search code in repo, get file from repo
 - code: run code, execute python, calculate with code, plot a chart, generate a script, "run this", "execute", "compute using code", "write a script"
 
 Rules:
@@ -47,6 +48,8 @@ Rules:
 - Use "rag" ONLY when the question is likely about an uploaded document or research paper
 - Default to "general" if unsure between rag and general
 - If the task contains a full URL (starts with http:// or https://), ALWAYS route to browser
+- CRITICAL: anything mentioning "github", "repo", "repository", "issue", "PR", "pull request", "branch", "commit" -> github
+- CRITICAL: anything mentioning "email", "gmail", "calendar", "drive", "send email", "read email" -> action
 
 Examples:
 "What does the paper say about X?" -> rag
@@ -54,29 +57,34 @@ Examples:
 "What is quantum computing?" -> general
 "Calculate 10% of 500" -> analysis
 "Send an email to John" -> action
+"Read my emails" -> action
+"List my Gmail inbox" -> action
 "List my Google Drive files" -> action
-"Show my Drive documents" -> action
+"Create a calendar event" -> action
+"Show my calendar" -> action
 "Search the web for latest AI news" -> browser
 "What is the latest test match score?" -> browser
-"Tell me about latest cricket match" -> browser  
+"Tell me about latest cricket match" -> browser
 "What happened in the news today?" -> browser
 "Latest score of India vs Australia" -> browser
 "Scrape https://arxiv.org/abs/2106.09685 and summarize" -> browser
-"Visit this URL and summarize: https://..." -> browser
 "List my GitHub issues" -> github
-"Create a GitHub issue for the login bug" -> github
+"Create a GitHub issue" -> github
+"Create a branch in my repo" -> github
+"Create a github branch called X from main" -> github
 "What PRs are open in my repo?" -> github
 "Suggest a fix for issue #5" -> github
 "Auto fix GitHub issue number 1" -> github
 "How many github repos do I have?" -> github
-"How many repositories do I have?" -> github
 "Fix issue #1 automatically" -> github
 "Create a PR to fix issue 1" -> github
-"Create a github issue with title X and body Y" -> github
-"Create a new issue in my github repo" -> github
 "Review PR number 2" -> github
 "Show repo health" -> github
 "List commits in my repo" -> github
+"Search code in my github repo for X" -> github
+"Get the file README.md from my github repo" -> github
+"Get file contents from repo" -> github
+"Show github workflow runs" -> github
 "Run a Python script to calculate fibonacci numbers" -> code
 "Execute code to plot a sine wave" -> code
 "Write and run a script to sort this data" -> code
@@ -543,22 +551,17 @@ def run_agent(task: str, user_id: str = "default",
     final_state = graph.invoke(initial_state)
     final_answer = final_state.get("final_answer", "")
     plan = final_state.get("plan", [])
+    log.info("run_agent_complete", plan=plan, plan_type=type(plan).__name__, final_answer_len=len(final_answer or ""))
+    if not isinstance(plan, list):
+        plan = []
     agent_used = plan[0] if plan else "blocked"
 
     if final_answer:
         store_turn(user_id, session_id, "assistant", final_answer, agent_used)
 
-    # return {
-    #     "answer": final_answer,
-    #     "agent_used": agent_used,
-    #     "trace_id": final_state.get("trace_id"),
-    #     "session_id": session_id,
-    #     "error": final_state.get("error"),
-    # }
-    plan = final_state.get("plan", [])
     return {
         "answer": final_answer,
-        "agent_used": plan[0] if plan else "blocked",
+        "agent_used": agent_used,
         "trace_id": final_state.get("trace_id"),
         "session_id": session_id,
         "error": final_state.get("error"),

@@ -133,7 +133,7 @@ from fastapi import BackgroundTasks
 class AgentRequest(BaseModel):
     task: str
     user_id: str = "default"
-    session_id: str = None
+    session_id: Optional[str] = None
 
 
 def _background_memory(task: str, answer: str, user_id: str):
@@ -237,17 +237,17 @@ async def voice_endpoint(websocket: WebSocket):
 
 from fastapi import UploadFile, File
 from fastapi.responses import Response
-from voice.stt import transcribe_audio
-from voice.tts import text_to_speech
 
 @app.post("/voice/transcribe")
 async def transcribe_endpoint(file: UploadFile = File(...)):
+    from voice.stt import transcribe_audio
     audio_bytes = await file.read()
     transcript = transcribe_audio(audio_bytes)
     return {"transcript": transcript}
 
 @app.post("/voice/speak")
 def speak_endpoint(text: str):
+    from voice.tts import text_to_speech
     audio_bytes = text_to_speech(text)
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
@@ -256,15 +256,17 @@ async def voice_ask_endpoint(
     file: UploadFile = File(...),
     user_id: str = "default"
 ):
+    from voice.stt import transcribe_audio
+    from voice.tts import text_to_speech
     audio_bytes = await file.read()
     transcript = transcribe_audio(audio_bytes)
     result = run_agent(task=transcript, user_id=user_id)
-    answer = result.get("answer", "")
-    audio_response = text_to_speech(answer)
+    answer_text = result.get("answer", "")
+    audio_response = text_to_speech(answer_text)
     audio_b64 = base64.b64encode(audio_response).decode("utf-8")
     return {
         "transcript": transcript,
-        "answer": answer,
+        "answer": answer_text,
         "agent_used": result.get("agent_used"),
         "audio_b64": audio_b64,
     }
@@ -324,3 +326,94 @@ def reject_github_endpoint(trace_id: str):
     from agents.github_agent import reject_github_action
     result = reject_github_action(trace_id)
     return {"status": "rejected", "result": result}
+
+
+# ── Streaming endpoint ─────────────────────────────────────────────────────────
+
+from fastapi.responses import StreamingResponse
+from rag.chain import answer_stream
+
+@app.get("/stream")
+async def stream_endpoint(task: str, user_id: str = "default"):
+    from memory.long_term import retrieve_memories, get_top_memories
+    from memory.conversation import store_turn
+
+    # Inject memory context
+    semantic = retrieve_memories(user_id, task, top_k=5)
+    top = get_top_memories(user_id, top_k=3)
+    all_mem = list(dict.fromkeys(semantic + top))
+    memory_context = "\n".join(f"- {m}" for m in all_mem[:8])
+
+    store_turn(user_id, "stream", "user", task)
+
+    # def generate():
+    #     full_response = ""
+    #     # Send memory context as first SSE event
+    #     if memory_context:
+    #         yield f"data: [CONTEXT]{memory_context}[/CONTEXT]\n\n"
+
+    #     # Stream the answer
+    #     for token in answer_stream(task):
+    #         full_response += token
+    #         yield f"data: {token}\n\n"
+
+    #     # Send done signal
+    #     yield "data: [DONE]\n\n"
+
+    #     # Store response in background
+    #     store_turn(user_id, "stream", "assistant", full_response)
+
+    def generate():
+        full_response = ""
+        
+        if memory_context:
+            yield f"data: [CONTEXT]{memory_context}[/CONTEXT]\n\n"
+
+        # Check if RAG has relevant docs
+        from rag.retriever import HybridRetriever
+        retriever = HybridRetriever()
+        chunks = retriever.retrieve(task)
+        
+        if chunks and chunks[0].score > 0.02:
+            # Use RAG streaming
+            for token in answer_stream(task):
+                full_response += token
+                yield f"data: {token}\n\n"
+        else:
+            # Use direct LLM streaming with memory context
+            from groq import Groq
+            from rag.config import get_settings
+            s = get_settings()
+            client = Groq(api_key=s.groq_api_key)
+            
+            system = "You are a helpful assistant. Be concise and accurate."
+            if memory_context:
+                system += f"\n\nWhat you know about the user:\n{memory_context}"
+            
+            stream = client.chat.completions.create(
+                model=s.groq_model_large,
+                max_tokens=1024,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": task},
+                ],
+                stream=True,
+            )
+            for chunk in stream:
+                token = chunk.choices[0].delta.content
+                if token:
+                    full_response += token
+                    yield f"data: {token}\n\n"
+
+        yield "data: [DONE]\n\n"
+        store_turn(user_id, "stream", "assistant", full_response)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )

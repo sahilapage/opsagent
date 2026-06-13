@@ -64,3 +64,45 @@ Question: {query}"""
     log.info("rag_answer_generated", query=query, sources=len(chunks))
 
     return RAGResponse(answer=answer_text, sources=chunks, query=query)
+
+from groq import Groq
+from typing import Generator
+
+def answer_stream(
+    query: str,
+    metadata_filter: dict | None = None,
+    collection: str | None = None,
+) -> Generator[str, None, None]:
+    """Stream RAG answer token by token."""
+    s = get_settings()
+    retriever = HybridRetriever(collection=collection)
+    chunks = retriever.retrieve(query, metadata_filter=metadata_filter)
+    context = build_context(chunks)
+
+    system_prompt = """You are a precise question-answering assistant.
+Answer ONLY using the provided context chunks below.
+If the answer is not explicitly in the context, say "This information is not in the provided documents."
+Always cite sources using [Source N] inline.
+Never add information from outside the provided context.
+End with a Sources section listing which sources you used."""
+
+    user_prompt = f"""Context:
+{context}
+
+Question: {query}"""
+
+    client = get_client()
+    stream = client.chat.completions.create(
+        model=s.groq_model_large,
+        max_tokens=1024,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        stream=True,
+    )
+
+    for chunk in stream:
+        token = chunk.choices[0].delta.content
+        if token:
+            yield token

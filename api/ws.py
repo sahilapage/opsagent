@@ -4,8 +4,6 @@ import base64
 import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 from agents.orchestrator import run_agent
-from voice.stt import transcribe_audio
-from voice.tts import text_to_speech
 
 log = structlog.get_logger()
 
@@ -52,6 +50,7 @@ async def voice_ws_endpoint(websocket: WebSocket):
 
                 # Send audio response
                 try:
+                    from voice.tts import text_to_speech
                     audio_bytes = text_to_speech(answer)
                     audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
                     await websocket.send_text(json.dumps({
@@ -78,6 +77,7 @@ async def voice_ws_endpoint(websocket: WebSocket):
 
                 # STT
                 try:
+                    from voice.stt import transcribe_audio
                     transcript = transcribe_audio(audio_bytes)
                     await websocket.send_text(json.dumps({
                         "type": "transcript",
@@ -107,6 +107,7 @@ async def voice_ws_endpoint(websocket: WebSocket):
 
                 # TTS
                 try:
+                    from voice.tts import text_to_speech
                     audio_bytes = text_to_speech(answer)
                     audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
                     await websocket.send_text(json.dumps({

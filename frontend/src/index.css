@@ -1,0 +1,162 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --bg: #ffffff;
+  --bg2: #f9f9f8;
+  --bg3: #f4f4f3;
+  --border: #e5e5e3;
+  --border2: #d1d1cf;
+  --text: #1a1a1a;
+  --text2: #6b7280;
+  --text3: #9ca3af;
+  --accent: #1a1a1a;
+  --accent-hover: #333;
+  --success: #16a34a;
+  --warn: #d97706;
+  --err: #dc2626;
+  --radius: 8px;
+  --radius-sm: 6px;
+}
+
+html, body, #root {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button { cursor: pointer; border: none; outline: none; font-family: inherit; font-size: inherit; }
+input, textarea, select { font-family: inherit; font-size: inherit; outline: none; }
+input::placeholder, textarea::placeholder { color: var(--text3); }
+
+pre, code { font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  font-size: 13px;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.btn-primary {
+  background: var(--text);
+  color: #fff;
+  border: 1px solid var(--text);
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { background: var(--bg3); color: var(--text); }
+.btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-danger {
+  background: transparent;
+  color: var(--err);
+  border: 1px solid #fca5a5;
+}
+.btn-danger:hover { background: #fef2f2; }
+
+.btn-success {
+  background: transparent;
+  color: var(--success);
+  border: 1px solid #86efac;
+}
+.btn-success:hover { background: #f0fdf4; }
+
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+.btn-icon {
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid transparent;
+  transition: all 0.12s;
+}
+.btn-icon:hover { background: var(--bg3); border-color: var(--border); color: var(--text); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+.spin { animation: spin 0.7s linear infinite; }
+.fade-in { animation: fadeIn 0.18s ease; }
+
+.prose {
+  line-height: 1.75;
+  color: var(--text);
+  font-size: 14px;
+}
+.prose p { margin: 0 0 12px; }
+.prose p:last-child { margin-bottom: 0; }
+.prose h1,.prose h2,.prose h3,.prose h4 { color: var(--text); margin: 20px 0 8px; font-weight: 600; line-height: 1.3; }
+.prose h1 { font-size: 18px; }
+.prose h2 { font-size: 16px; }
+.prose h3 { font-size: 14px; }
+.prose ul,.prose ol { margin: 8px 0; padding-left: 22px; }
+.prose li { margin: 4px 0; }
+.prose code {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.prose pre {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+.prose pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+.prose blockquote {
+  border-left: 3px solid var(--border2);
+  margin: 12px 0;
+  padding: 4px 14px;
+  color: var(--text2);
+}
+.prose table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+.prose th { background: var(--bg2); text-align: left; padding: 8px 12px; border: 1px solid var(--border); font-weight: 600; }
+.prose td { padding: 7px 12px; border: 1px solid var(--border); }
+.prose strong { color: var(--text); font-weight: 600; }
+.prose hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.prose a { color: #2563eb; }
+.prose a:hover { text-decoration: underline; }
