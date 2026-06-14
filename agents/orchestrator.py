@@ -33,7 +33,7 @@ def get_llm_fast():
 ROUTER_PROMPT = """Classify the user query into exactly one category.
 
 Categories:
-- rag: questions explicitly about ingested documents, papers, research, "what does the paper say", "according to the document", topics that were likely uploaded
+- rag: questions about uploaded/ingested content — documents, PDFs, papers, research, resumes, CVs, reports, files, URLs the user has ingested; use when the user seems to reference something stored in the knowledge base
 - analysis: math, calculations, data analysis, statistics, "how many", "calculate", "compute", economic analysis, ripple effects
 - action: send email, read emails, Gmail, create/list calendar events, Google Calendar, list/read Drive files, Google Drive
 - browser: search web, visit URL, find latest news, current scores, recent events, anything requiring real-time information, "latest", "current", "today", "recent", "live"
@@ -45,14 +45,20 @@ Rules:
 - Reply with ONLY the single category word
 - No punctuation, no explanation, no other words
 - Use "general" for world knowledge questions (who is X, what is Y, history, sports, geography)
-- Use "rag" ONLY when the question is likely about an uploaded document or research paper
-- Default to "general" if unsure between rag and general
+- Use "rag" when the user references a document, file, paper, resume, CV, or anything they may have uploaded
+- Default to "general" only for pure world-knowledge questions with no document reference
 - If the task contains a full URL (starts with http:// or https://), ALWAYS route to browser
 - CRITICAL: anything mentioning "github", "repo", "repository", "issue", "PR", "pull request", "branch", "commit" -> github
 - CRITICAL: anything mentioning "email", "gmail", "calendar", "drive", "send email", "read email" -> action
 
 Examples:
 "What does the paper say about X?" -> rag
+"What is in my resume?" -> rag
+"What are my technical skills?" -> rag
+"Summarize the document" -> rag
+"What does my CV say about experience?" -> rag
+"What did the uploaded PDF cover?" -> rag
+"Tell me about the research paper" -> rag
 "Who owns the IPL?" -> general
 "What is quantum computing?" -> general
 "Calculate 10% of 500" -> analysis
@@ -109,6 +115,21 @@ def router_node(state: AgentState) -> AgentState:
         if cleaned in valid:
             category = cleaned
             break
+
+    # KB probe: if LLM said general, check if the knowledge base has a strong match.
+    # Non-ambiguous agents (github, action, browser, code) skip the probe.
+    if category == "general":
+        try:
+            from rag.retriever import HybridRetriever
+            chunks = HybridRetriever().retrieve(state["task"])
+            # A top score meaningfully above the noise floor (~0.015) means KB has content
+            # Only override if KB match is strong (well above noise floor ~0.016).
+            # RRF max is ~0.033; requiring >0.024 means top result in BOTH dense+sparse.
+            if chunks and chunks[0].score > 0.024:
+                category = "rag"
+                log.info("router_kb_override", score=round(chunks[0].score, 4), src=chunks[0].metadata.get("source",""))
+        except Exception:
+            pass
 
     log.info("router_decision", task=state["task"][:60], raw=raw, category=category)
     return {**state, "plan": [category], "current_step": 0}
