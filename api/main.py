@@ -422,7 +422,8 @@ async def stream_endpoint(task: str, user_id: str = "default"):
         retriever = HybridRetriever()
         chunks = retriever.retrieve(task)
         
-        if chunks and chunks[0].score > 0.02:
+        # RRF scores top out at ~0.033; any result means we have relevant KB content
+        if chunks:
             # Use RAG streaming
             for token in answer_stream(task):
                 full_response += token

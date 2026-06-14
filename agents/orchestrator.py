@@ -559,10 +559,23 @@ def run_agent(task: str, user_id: str = "default",
     if final_answer:
         store_turn(user_id, session_id, "assistant", final_answer, agent_used)
 
+    # Extract sources from RAG results if present
+    sources = []
+    for r in final_state.get("results", []):
+        if r.get("agent") == "rag" and r.get("sources"):
+            raw = r["sources"]
+            seen = set()
+            for s in raw:
+                key = (s.get("source", ""), s.get("page", ""))
+                if key not in seen:
+                    seen.add(key)
+                    sources.append({"source": s.get("source", ""), "page": s.get("page")})
+
     return {
         "answer": final_answer,
         "agent_used": agent_used,
         "trace_id": final_state.get("trace_id"),
         "session_id": session_id,
+        "sources": sources,
         "error": final_state.get("error"),
     }

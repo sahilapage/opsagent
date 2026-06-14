@@ -15,12 +15,15 @@ class HybridRetriever:
         self.fetch_k = s.retrieval_fetch_k
 
     def retrieve(self, query: str, metadata_filter: dict | None = None) -> list[SearchResult]:
-        candidates = hybrid_search(
+        # Fetch more candidates than needed, RRF fusion already ranks well
+        results = hybrid_search(
             query=query,
             top_k=self.fetch_k,
             collection=self.collection,
             metadata_filter=metadata_filter,
         )
-        results = rerank(query, candidates, top_k=self.top_k)
-        log.info("retrieve_done", query=query, candidates=len(candidates), returned=len(results))
-        return results
+        # Cross-encoder reranker (ms-marco) degrades results for document-style
+        # queries because it's tuned for web-search pairs; trust RRF instead.
+        top = results[:self.top_k]
+        log.info("retrieve_done", query=query, candidates=len(results), returned=len(top))
+        return top

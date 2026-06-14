@@ -105,6 +105,21 @@ function Message({ msg }) {
           style={{ marginTop: 12, maxWidth: '85%', borderRadius: 6, border: '1px solid var(--border)' }}
         />
       )}
+      {msg.sources && msg.sources.length > 0 && (
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {msg.sources.map((s, i) => (
+            <span key={i} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '2px 8px', borderRadius: 99, fontSize: 11,
+              background: 'var(--bg3)', border: '1px solid var(--border)',
+              color: 'var(--text2)',
+            }}>
+              {s.source.replace(/^https?:\/\//, '').split('/')[0] || s.source}
+              {s.page ? ` p.${s.page}` : ''}
+            </span>
+          ))}
+        </div>
+      )}
       {msg.traceId && msg.needsApproval && (
         <div style={{
           marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -212,6 +227,7 @@ export default function Chat({ userId }) {
           traceId: res.trace_id,
           needsApproval: hasApproval && res.trace_id,
           chartB64: res.chart_b64,
+          sources: res.sources || [],
           time: now(),
         }]);
       } catch (err) {
