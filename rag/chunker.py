@@ -16,8 +16,10 @@ def chunk_documents(
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size or settings.chunk_size,
         chunk_overlap=chunk_overlap or settings.chunk_overlap,
-        separators=["\n\n", "\n", ". ", " ", ""],
+        # Hierarchy: section → paragraph → sentence → word
+        separators=["\n\n\n", "\n\n", "\n", ". ", "! ", "? ", "; ", ": ", ", ", " ", ""],
         length_function=len,
+        keep_separator=True,
     )
     all_chunks = []
     for text, base_meta in pages:

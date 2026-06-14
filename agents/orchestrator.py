@@ -121,7 +121,7 @@ def router_node(state: AgentState) -> AgentState:
     if category == "general":
         try:
             from rag.retriever import HybridRetriever
-            chunks = HybridRetriever().retrieve(state["task"])
+            chunks = HybridRetriever().retrieve(state["task"], fast=True)
             # A top score meaningfully above the noise floor (~0.015) means KB has content
             # Only override if KB match is strong (well above noise floor ~0.016).
             # RRF max is ~0.033; requiring >0.024 means top result in BOTH dense+sparse.

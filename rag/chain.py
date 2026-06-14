@@ -23,9 +23,17 @@ def build_context(chunks: list[SearchResult]) -> str:
     for i, c in enumerate(chunks, 1):
         meta = c.metadata
         source = meta.get("source", "unknown")
-        page = meta.get("page", "")
-        parts.append(f"[Source {i}] ({source}, page {page})\n{c.text}")
-    return "\n\n".join(parts)
+        page = meta.get("page")
+        doc_type = meta.get("doc_type", "")
+        header = f"[Source {i}] {source}"
+        if page:
+            header += f" · page {page}"
+        if doc_type:
+            header += f" [{doc_type.upper()}]"
+        # Trim very long chunks to keep context window efficient
+        text = c.text if len(c.text) <= 700 else c.text[:700] + "…"
+        parts.append(f"{header}\n{text}")
+    return "\n\n---\n\n".join(parts)
 
 
 def answer(
@@ -38,17 +46,18 @@ def answer(
     chunks = retriever.retrieve(query, metadata_filter=metadata_filter)
     context = build_context(chunks)
 
-    system_prompt = """You are a precise question-answering assistant.
-Answer ONLY using the provided context chunks below.
-If the answer is not explicitly in the context, say "This information is not in the provided documents."
-Always cite sources using [Source N] inline.
-Never add information from outside the provided context.
-End with a Sources section listing which sources you used."""
-
-    user_prompt = f"""Context:
-{context}
-
-Question: {query}"""
+    system_prompt = (
+        "You are a precise question-answering assistant with access to a knowledge base.\n\n"
+        "Rules:\n"
+        "- Answer using ONLY the provided context chunks.\n"
+        "- Cite sources inline as [Source N] whenever you use information from them.\n"
+        "- If multiple sources agree, synthesize them into one clear answer.\n"
+        "- If sources conflict, mention both and note the discrepancy.\n"
+        "- If the answer is not in the context, say exactly: "
+        "'This information is not in the provided documents.'\n"
+        "- Be concise and direct. Do not repeat the question."
+    )
+    user_prompt = f"Context:\n{context}\n\nQuestion: {query}"
 
     client = get_client()
     message = client.chat.completions.create(
@@ -79,17 +88,18 @@ def answer_stream(
     chunks = retriever.retrieve(query, metadata_filter=metadata_filter)
     context = build_context(chunks)
 
-    system_prompt = """You are a precise question-answering assistant.
-Answer ONLY using the provided context chunks below.
-If the answer is not explicitly in the context, say "This information is not in the provided documents."
-Always cite sources using [Source N] inline.
-Never add information from outside the provided context.
-End with a Sources section listing which sources you used."""
-
-    user_prompt = f"""Context:
-{context}
-
-Question: {query}"""
+    system_prompt = (
+        "You are a precise question-answering assistant with access to a knowledge base.\n\n"
+        "Rules:\n"
+        "- Answer using ONLY the provided context chunks.\n"
+        "- Cite sources inline as [Source N] whenever you use information from them.\n"
+        "- If multiple sources agree, synthesize them into one clear answer.\n"
+        "- If sources conflict, mention both and note the discrepancy.\n"
+        "- If the answer is not in the context, say exactly: "
+        "'This information is not in the provided documents.'\n"
+        "- Be concise and direct. Do not repeat the question."
+    )
+    user_prompt = f"Context:\n{context}\n\nQuestion: {query}"
 
     client = get_client()
     stream = client.chat.completions.create(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 import hashlib
+import math
+import re
 import structlog
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -58,34 +60,34 @@ def ensure_collection(collection: str | None = None) -> str:
     return col
 
 
-# def _bm25_sparse_vector(text: str) -> SparseVector:
-#     tokens = text.lower().split()
-#     bm25 = BM25Okapi([tokens])
-#     scores = bm25.get_scores(tokens)
-#     indices, values = [], []
-#     for token, score in zip(tokens, scores):
-#         if score > 0:
-#             idx = int(hashlib.md5(token.encode()).hexdigest()[:8], 16) % 1_000_000
-#             indices.append(idx)
-#             values.append(float(score))
-#     return SparseVector(indices=indices, values=values)
+_STOPWORDS = frozenset({
+    'the','a','an','and','or','but','in','on','at','to','for','of','with',
+    'is','are','was','were','be','been','being','have','has','had','do',
+    'does','did','will','would','could','should','may','might','can',
+    'it','its','this','that','these','those','as','by','from','not',
+    'no','so','if','than','then','there','when','where','who','which','what',
+    'i','you','he','she','we','they','my','your','his','her','our','their',
+})
+
+def _tokenize(text: str) -> list[str]:
+    tokens = re.findall(r'\b[a-zA-Z0-9][a-zA-Z0-9_\-]*\b', text.lower())
+    return [t for t in tokens if t not in _STOPWORDS and len(t) > 1]
 
 def _bm25_sparse_vector(text: str) -> SparseVector:
-    tokens = text.lower().split()
+    tokens = _tokenize(text)
     if not tokens:
         return SparseVector(indices=[], values=[])
-    
-    # Count term frequencies
-    tf: dict[int, float] = {}
+    tf: dict[int, int] = {}
     for token in tokens:
         idx = int(hashlib.md5(token.encode()).hexdigest()[:8], 16) % 1_000_000
         tf[idx] = tf.get(idx, 0) + 1
-    
-    # Normalize by document length
-    max_tf = max(tf.values())
     indices = list(tf.keys())
-    values = [v / max_tf for v in tf.values()]
-    
+    # log(1+tf) smoothing: reduces dominance of high-frequency terms
+    values = [math.log1p(v) for v in tf.values()]
+    # L2-normalize for consistent cosine comparison
+    norm = sum(v * v for v in values) ** 0.5
+    if norm > 0:
+        values = [v / norm for v in values]
     return SparseVector(indices=indices, values=values)
 
 

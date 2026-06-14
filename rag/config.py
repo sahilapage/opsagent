@@ -25,12 +25,12 @@ class Settings(BaseSettings):
     embed_dim: int = 1024
 
     # Chunking
-    chunk_size: int = 800
-    chunk_overlap: int = 150
+    chunk_size: int = 1200
+    chunk_overlap: int = 250
 
     # Retrieval
-    retrieval_top_k: int = 5
-    retrieval_fetch_k: int = 20
+    retrieval_top_k: int = 7
+    retrieval_fetch_k: int = 40
 
     # Postgres
     database_url: str = "postgresql://opsagent:opsagent_secret@localhost:5432/opsagent"
