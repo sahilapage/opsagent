@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, Link, FileText, FileSpreadsheet, Loader2, RefreshCw, Database, CheckCircle2, XCircle } from 'lucide-react';
-import { ingestPDF, ingestCSV, ingestURL, listCollections } from '../api.js';
+import { Upload, Link, FileText, FileSpreadsheet, Loader2, RefreshCw, Database, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
+import { ingestPDF, ingestCSV, ingestURL, listCollections, listDocuments, deleteDocument } from '../api.js';
 
 function DropZone({ accept, onFile, loading, label, icon: Icon }) {
   const [dragOver, setDragOver] = useState(false);
@@ -70,6 +70,12 @@ function Result({ result, indexed }) {
   );
 }
 
+function DocTypeIcon({ source }) {
+  if (source.startsWith('http://') || source.startsWith('https://')) return <Link size={14} />;
+  if (source.toLowerCase().endsWith('.csv')) return <FileSpreadsheet size={14} />;
+  return <FileText size={14} />;
+}
+
 export default function Ingest() {
   const [tab, setTab] = useState('pdf');
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -81,28 +87,31 @@ export default function Ingest() {
   const [urlResult, setUrlResult] = useState(null);
   const [urlInput, setUrlInput] = useState('');
   const [collections, setCollections] = useState(null);
-  const [colLoading, setColLoading] = useState(false);
+  const [documents, setDocuments] = useState(null);
+  const [docLoading, setDocLoading] = useState(false);
   const [indexed, setIndexed] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(null);
   const pollRef = useRef(null);
 
-  const loadCollections = useCallback(async () => {
-    setColLoading(true);
+  const loadDocuments = useCallback(async () => {
+    setDocLoading(true);
     try {
-      const data = await listCollections();
-      setCollections(data.collections);
-      return data.collections;
+      const data = await listDocuments();
+      setDocuments(data.documents);
+      return data.documents;
     } catch {
-      setCollections([]);
+      setDocuments([]);
       return [];
     } finally {
-      setColLoading(false);
+      setDocLoading(false);
     }
   }, []);
 
-  // Auto-load collections when switching to that tab
+  // Auto-load documents when switching to that tab
   useEffect(() => {
-    if (tab === 'collections') loadCollections();
-  }, [tab, loadCollections]);
+    if (tab === 'documents') loadDocuments();
+  }, [tab, loadDocuments]);
 
   // Cleanup poll on unmount
   useEffect(() => () => clearInterval(pollRef.current), []);
@@ -120,10 +129,11 @@ export default function Ingest() {
         if (total > prevPoints || attempts >= 12) {
           setIndexed(true);
           clearInterval(pollRef.current);
+          loadDocuments();
         }
       } catch {}
     }, 3000);
-  }, []);
+  }, [loadDocuments]);
 
   const handleIngest = useCallback(async (ingestFn, setLoading, setResult) => {
     setLoading(true);
@@ -131,7 +141,6 @@ export default function Ingest() {
     setIndexed(false);
     clearInterval(pollRef.current);
 
-    // Snapshot current point count before ingest
     let prevPoints = 0;
     try {
       const prev = await listCollections();
@@ -151,11 +160,24 @@ export default function Ingest() {
     }
   }, [startPolling]);
 
+  const handleDelete = useCallback(async (source) => {
+    setDeleteLoading(source);
+    try {
+      await deleteDocument(source);
+      setDocuments(prev => prev?.filter(d => d.source !== source));
+    } catch {
+      await loadDocuments();
+    } finally {
+      setDeleteLoading(null);
+      setConfirmDelete(null);
+    }
+  }, [loadDocuments]);
+
   const TABS = [
-    { id: 'pdf',         label: 'PDF',         icon: FileText },
-    { id: 'csv',         label: 'CSV',         icon: FileSpreadsheet },
-    { id: 'url',         label: 'URL',         icon: Link },
-    { id: 'collections', label: 'Collections', icon: Database },
+    { id: 'pdf',       label: 'PDF',       icon: FileText },
+    { id: 'csv',       label: 'CSV',       icon: FileSpreadsheet },
+    { id: 'url',       label: 'URL',       icon: Link },
+    { id: 'documents', label: 'Documents', icon: Database },
   ];
 
   return (
@@ -269,41 +291,107 @@ export default function Ingest() {
           </div>
         )}
 
-        {tab === 'collections' && (
+        {tab === 'documents' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
               <p style={{ margin: 0, flex: 1, fontSize: 13, color: 'var(--text2)' }}>
-                Qdrant vector collections.
+                {documents?.length
+                  ? `${documents.length} document${documents.length !== 1 ? 's' : ''} in knowledge base`
+                  : 'Ingested documents in knowledge base.'}
               </p>
-              <button className="btn btn-ghost btn-sm" onClick={loadCollections}>
-                {colLoading ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />} Refresh
+              <button className="btn btn-ghost btn-sm" onClick={loadDocuments}>
+                {docLoading ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />} Refresh
               </button>
             </div>
-            {colLoading && !collections && (
+
+            {docLoading && !documents && (
               <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text3)', fontSize: 13 }}>
                 <Loader2 size={16} style={{ animation: 'spin 0.7s linear infinite', margin: '0 auto 8px', display: 'block' }} />
                 Loading…
               </div>
             )}
-            {!colLoading && collections?.length === 0 && (
+
+            {!docLoading && documents?.length === 0 && (
               <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text3)', fontSize: 13 }}>
-                No collections. Ingest a document first.
+                No documents yet. Ingest a file or URL first.
               </div>
             )}
-            {collections && collections.map(col => (
-              <div key={col.name} style={{
-                display: 'flex', alignItems: 'center', padding: '12px 0',
-                borderBottom: '1px solid var(--border)',
-              }}>
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{col.name}</span>
-                <span style={{ fontSize: 12, color: 'var(--text2)', marginRight: 12 }}>
-                  {col.points?.toLocaleString() ?? '?'} pts
-                </span>
-                <span style={{ fontSize: 12, color: col.status === 'green' ? 'var(--success)' : 'var(--warn)' }}>
-                  {col.status}
-                </span>
-              </div>
-            ))}
+
+            {documents && documents.map(doc => {
+              const isConfirming = confirmDelete === doc.source;
+              const isDeleting = deleteLoading === doc.source;
+              const isUrl = doc.source.startsWith('http://') || doc.source.startsWith('https://');
+              const displayName = isUrl ? doc.source.replace(/^https?:\/\//, '') : doc.source;
+
+              return (
+                <div key={doc.source} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '11px 0',
+                  borderBottom: '1px solid var(--border)',
+                }}>
+                  <span style={{ color: 'var(--text3)', flexShrink: 0, display: 'flex' }}>
+                    <DocTypeIcon source={doc.source} />
+                  </span>
+
+                  <span
+                    style={{
+                      flex: 1, fontSize: 13, color: 'var(--text)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}
+                    title={doc.source}
+                  >
+                    {displayName}
+                  </span>
+
+                  <span style={{
+                    fontSize: 11, color: 'var(--text3)', background: 'var(--bg3)',
+                    padding: '2px 7px', borderRadius: 99, whiteSpace: 'nowrap', flexShrink: 0,
+                  }}>
+                    {doc.chunks} chunks
+                  </span>
+
+                  {isConfirming ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text2)' }}>Delete?</span>
+                      <button
+                        onClick={() => handleDelete(doc.source)}
+                        disabled={isDeleting}
+                        style={{
+                          padding: '2px 8px', borderRadius: 4,
+                          border: '1px solid #ef4444', background: '#ef4444',
+                          color: '#fff', fontSize: 11, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: 4,
+                        }}
+                      >
+                        {isDeleting ? <Loader2 size={10} style={{ animation: 'spin 0.7s linear infinite' }} /> : 'Yes'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelete(null)}
+                        style={{
+                          padding: '2px 8px', borderRadius: 4,
+                          border: '1px solid var(--border)', background: 'transparent',
+                          color: 'var(--text2)', fontSize: 11, cursor: 'pointer',
+                        }}
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDelete(doc.source)}
+                      title="Remove from knowledge base"
+                      style={{
+                        padding: 4, border: 'none', background: 'transparent',
+                        color: 'var(--text3)', cursor: 'pointer', borderRadius: 4,
+                        flexShrink: 0, display: 'flex', alignItems: 'center',
+                      }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

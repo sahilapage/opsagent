@@ -34,6 +34,15 @@ export const ingestURL = (url, collection = null) =>
 export const listCollections = () =>
   http.get('/collections').then(r => r.data);
 
+export const listDocuments = (collection = null) =>
+  http.get('/documents', { params: collection ? { collection } : {} }).then(r => r.data);
+
+export const deleteDocument = (source, collection = null) => {
+  const params = { source };
+  if (collection) params.collection = collection;
+  return http.delete('/documents', { params }).then(r => r.data);
+};
+
 // Memory
 export const listMemories = (userId) =>
   http.get(`/memory/${userId}`).then(r => r.data);

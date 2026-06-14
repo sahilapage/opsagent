@@ -69,6 +69,49 @@ def list_collections():
     return {"collections": result}
 
 
+@app.get("/documents")
+def list_documents(collection: Optional[str] = None):
+    from rag.config import get_settings
+    s = get_settings()
+    col = collection or s.qdrant_collection
+    client = get_client()
+    sources: dict[str, int] = {}
+    offset = None
+    while True:
+        res, next_offset = client.scroll(
+            collection_name=col,
+            limit=250,
+            offset=offset,
+            with_payload=["source"],
+            with_vectors=False,
+        )
+        for p in res:
+            src = p.payload.get("source", "unknown")
+            sources[src] = sources.get(src, 0) + 1
+        if next_offset is None:
+            break
+        offset = next_offset
+    docs = [{"source": src, "chunks": n} for src, n in sorted(sources.items())]
+    return {"documents": docs, "collection": col}
+
+
+@app.delete("/documents")
+def delete_document_endpoint(source: str, collection: Optional[str] = None):
+    from rag.config import get_settings
+    from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector
+    s = get_settings()
+    col = collection or s.qdrant_collection
+    client = get_client()
+    client.delete(
+        collection_name=col,
+        points_selector=FilterSelector(
+            filter=Filter(must=[FieldCondition(key="source", match=MatchValue(value=source))])
+        )
+    )
+    log.info("document_deleted", source=source, collection=col)
+    return {"status": "success", "deleted": source}
+
+
 def _bg_upsert(chunks, collection: str, label: str):
     """Embed + upsert chunks in a background thread (slow for large docs)."""
     try:
