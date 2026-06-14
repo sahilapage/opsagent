@@ -76,6 +76,20 @@ function DocTypeIcon({ source }) {
   return <FileText size={14} />;
 }
 
+function fmtDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: diffDays > 365 ? 'numeric' : undefined });
+  } catch { return ''; }
+}
+
 export default function Ingest() {
   const [tab, setTab] = useState('pdf');
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -322,55 +336,57 @@ export default function Ingest() {
               const isDeleting = deleteLoading === doc.source;
               const isUrl = doc.source.startsWith('http://') || doc.source.startsWith('https://');
               const displayName = isUrl ? doc.source.replace(/^https?:\/\//, '') : doc.source;
+              const uploadedOn = fmtDate(doc.ingested_at);
 
               return (
                 <div key={doc.source} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '11px 0',
+                  padding: '12px 0',
                   borderBottom: '1px solid var(--border)',
                 }}>
-                  <span style={{ color: 'var(--text3)', flexShrink: 0, display: 'flex' }}>
+                  {/* icon */}
+                  <span style={{ color: 'var(--text3)', flexShrink: 0, display: 'flex', marginTop: 1 }}>
                     <DocTypeIcon source={doc.source} />
                   </span>
 
-                  <span
-                    style={{
-                      flex: 1, fontSize: 13, color: 'var(--text)',
+                  {/* name + date stacked */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13, color: 'var(--text)', fontWeight: 500,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}
-                    title={doc.source}
-                  >
-                    {displayName}
-                  </span>
+                    }} title={doc.source}>
+                      {displayName}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                      {uploadedOn && <span>{uploadedOn} · </span>}
+                      <span>{doc.chunks} chunks</span>
+                    </div>
+                  </div>
 
-                  <span style={{
-                    fontSize: 11, color: 'var(--text3)', background: 'var(--bg3)',
-                    padding: '2px 7px', borderRadius: 99, whiteSpace: 'nowrap', flexShrink: 0,
-                  }}>
-                    {doc.chunks} chunks
-                  </span>
-
+                  {/* delete */}
                   {isConfirming ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                      <span style={{ fontSize: 12, color: 'var(--text2)' }}>Delete?</span>
+                      <span style={{ fontSize: 12, color: 'var(--text2)' }}>Remove?</span>
                       <button
                         onClick={() => handleDelete(doc.source)}
                         disabled={isDeleting}
                         style={{
-                          padding: '2px 8px', borderRadius: 4,
+                          padding: '3px 10px', borderRadius: 4,
                           border: '1px solid #ef4444', background: '#ef4444',
-                          color: '#fff', fontSize: 11, cursor: 'pointer',
+                          color: '#fff', fontSize: 12, cursor: 'pointer',
                           display: 'flex', alignItems: 'center', gap: 4,
                         }}
                       >
-                        {isDeleting ? <Loader2 size={10} style={{ animation: 'spin 0.7s linear infinite' }} /> : 'Yes'}
+                        {isDeleting
+                          ? <Loader2 size={10} style={{ animation: 'spin 0.7s linear infinite' }} />
+                          : 'Yes'}
                       </button>
                       <button
                         onClick={() => setConfirmDelete(null)}
                         style={{
-                          padding: '2px 8px', borderRadius: 4,
+                          padding: '3px 10px', borderRadius: 4,
                           border: '1px solid var(--border)', background: 'transparent',
-                          color: 'var(--text2)', fontSize: 11, cursor: 'pointer',
+                          color: 'var(--text2)', fontSize: 12, cursor: 'pointer',
                         }}
                       >
                         No
@@ -381,12 +397,13 @@ export default function Ingest() {
                       onClick={() => setConfirmDelete(doc.source)}
                       title="Remove from knowledge base"
                       style={{
-                        padding: 4, border: 'none', background: 'transparent',
-                        color: 'var(--text3)', cursor: 'pointer', borderRadius: 4,
-                        flexShrink: 0, display: 'flex', alignItems: 'center',
+                        padding: '5px 8px', border: '1px solid var(--border)',
+                        background: 'transparent', color: 'var(--text3)',
+                        cursor: 'pointer', borderRadius: 6, flexShrink: 0,
+                        display: 'flex', alignItems: 'center', gap: 5, fontSize: 12,
                       }}
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={12} /> Delete
                     </button>
                   )}
                 </div>

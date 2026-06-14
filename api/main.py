@@ -75,23 +75,34 @@ def list_documents(collection: Optional[str] = None):
     s = get_settings()
     col = collection or s.qdrant_collection
     client = get_client()
-    sources: dict[str, int] = {}
+    # {source: {chunks, ingested_at (earliest)}}
+    sources: dict[str, dict] = {}
     offset = None
     while True:
         res, next_offset = client.scroll(
             collection_name=col,
             limit=250,
             offset=offset,
-            with_payload=["source"],
+            with_payload=["source", "ingested_at"],
             with_vectors=False,
         )
         for p in res:
             src = p.payload.get("source", "unknown")
-            sources[src] = sources.get(src, 0) + 1
+            ts = p.payload.get("ingested_at", "")
+            if src not in sources:
+                sources[src] = {"chunks": 0, "ingested_at": ts}
+            sources[src]["chunks"] += 1
+            # keep the earliest timestamp
+            if ts and ts < sources[src]["ingested_at"]:
+                sources[src]["ingested_at"] = ts
         if next_offset is None:
             break
         offset = next_offset
-    docs = [{"source": src, "chunks": n} for src, n in sorted(sources.items())]
+    docs = sorted(
+        [{"source": src, **info} for src, info in sources.items()],
+        key=lambda d: d.get("ingested_at", ""),
+        reverse=True,  # newest first
+    )
     return {"documents": docs, "collection": col}
 
 
